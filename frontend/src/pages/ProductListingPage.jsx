@@ -1,0 +1,20 @@
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import commerceService from '../services/commerceService'
+import ProductCard from '../components/ProductCard'
+import '../styles/portal.css'
+
+export function ProductListingPage() {
+  const [searchParams] = useSearchParams()
+  const [products, setProducts] = useState([])
+  const [categories, setCategories] = useState([])
+  const [brands, setBrands] = useState([])
+  const [sort, setSort] = useState('relevance')
+  const [loading, setLoading] = useState(true)
+  const [message, setMessage] = useState('')
+  const [filters, setFilters] = useState({ category: searchParams.get('category') || '', brand: '', availability: false })
+  useEffect(() => { Promise.allSettled([commerceService.getProducts({ search: searchParams.get('search') || undefined, categoryId: searchParams.get('category') || undefined }), commerceService.getCategories(), commerceService.getBrands()]).then(([p, c, b]) => { setProducts(p.value?.items || p.value || []); setCategories(c.value || []); setBrands(b.value || []) }).finally(() => setLoading(false)) }, [searchParams])
+  const visible = [...products].filter((product) => !filters.brand || String(product.brandId || product.brand?.id) === filters.brand).sort((a, b) => sort === 'newest' ? new Date(b.createdAt) - new Date(a.createdAt) : sort === 'rating' ? Number(b.rating || 0) - Number(a.rating || 0) : sort === 'price-low' ? Number(a.price || 0) - Number(b.price || 0) : sort === 'price-high' ? Number(b.price || 0) - Number(a.price || 0) : 0)
+  const add = async (product) => { const variantId = product.defaultVariantId || product.variantId || product.variant?.id; if (!variantId) return setMessage('This product has no purchasable variant configured yet.'); try { await commerceService.addToCart(variantId); setMessage(`${product.name} added to your cart.`) } catch (error) { setMessage(error.message) } }
+  return <div className="listing-page"><div className="listing-intro"><div><span className="eyebrow">DISCOVER</span><h1>{searchParams.get('search') ? `Results for “${searchParams.get('search')}”` : 'All products'}</h1><p>{visible.length} products curated for your next find.</p></div><select className="sort-select" value={sort} onChange={(e) => setSort(e.target.value)}><option value="relevance">Sort: Relevance</option><option value="price-low">Price: Low to High</option><option value="price-high">Price: High to Low</option><option value="rating">Rating</option><option value="newest">Newest</option></select></div>{message && <div className="shop-notice">{message}</div>}<div className="listing-layout"><aside className="filters"><div className="filter-heading"><strong>Refine</strong><button onClick={() => setFilters({ category: '', brand: '', availability: false })}>Clear</button></div><label>Category<select value={filters.category} onChange={(e) => setFilters({ ...filters, category: e.target.value })}><option value="">All categories</option>{categories.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Brand<select value={filters.brand} onChange={(e) => setFilters({ ...filters, brand: e.target.value })}><option value="">All brands</option>{brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label className="check-filter"><input type="checkbox" checked={filters.availability} onChange={(e) => setFilters({ ...filters, availability: e.target.checked })} /> In stock only</label><div className="filter-note"><strong>More filters coming soon</strong><span>Price, rating and discount filters become available when the API exposes those fields.</span></div></aside><section className="listing-results">{loading ? <div className="inline-loading">Loading products...</div> : <div className="product-grid">{visible.map((product) => <ProductCard key={product.id} product={product} onAdd={add} />)}{visible.length === 0 && <div className="empty-state">No products match these filters.</div>}</div>}</section></div></div>
+}
